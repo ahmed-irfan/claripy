@@ -16,8 +16,13 @@ class Solver(
     frontend.FullFrontend,
 ):
     """Solver is the default Claripy frontend. It uses Z3 as the backend solver by default."""
+    try:
+        import yices
+        default_solver = backends.yices
+    except:
+        default_solver = backends.z3
 
-    def __init__(self, backend=backends.z3, **kwargs):
+    def __init__(self, backend=default_solver, **kwargs):
         super().__init__(backend, **kwargs)
 
 
@@ -30,8 +35,13 @@ class SolverCacheless(
     frontend.FullFrontend,
 ):
     """SolverCacheless is a Solver without caching. It uses Z3 as the backend solver by default."""
+    try:
+        import yices
+        default_solver = backends.yices
+    except:
+        default_solver = backends.z3
 
-    def __init__(self, backend=backends.z3, **kwargs):
+    def __init__(self, backend=default_solver, **kwargs):
         super().__init__(backend, **kwargs)
 
 
@@ -131,7 +141,13 @@ class SolverCompositeChild(
 ):
     """SolverCompositeChild is a frontend that is used as a child in a SolverComposite."""
 
-    def __init__(self, backend=backends.z3, **kwargs):
+    try:
+        import yices
+        default_solver = backends.yices
+    except:
+        default_solver = backends.z3
+        
+    def __init__(self, backend=default_solver, **kwargs):
         super().__init__(backend, **kwargs)
 
     def __repr__(self):

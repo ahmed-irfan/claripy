@@ -92,9 +92,14 @@ class FullFrontend(ConstrainedFrontend):
             self._add_constraints()
 
         solver = self._tls.solver
-        if self._solver_backend.reuse_z3_solver:
-            # we must re-add all constraints
-            self._add_constraints()
+        if hasattr(self._solver_backend, "reuse_z3_solver"):
+            if self._solver_backend.reuse_z3_solver:
+                # we must re-add all constraints
+                self._add_constraints()
+        if hasattr(self._solver_backend, "reuse_yices_solver"):
+            if self._solver_backend.reuse_yices_solver:
+                # we must re-add all constraints
+                self._add_constraints()
         return solver
 
     def _add_constraints(self):

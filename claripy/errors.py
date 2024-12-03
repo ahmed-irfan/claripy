@@ -25,6 +25,9 @@ class BackendUnsupportedError(BackendError):
     pass
 
 
+class ClaripyYicesError(ClaripyError):
+    pass
+
 class ClaripyZ3Error(ClaripyError):
     pass
 
