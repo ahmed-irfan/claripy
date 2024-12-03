@@ -8,8 +8,7 @@ from functools import reduce
 
 import claripy
 from claripy.annotation import RegionAnnotation, StridedIntervalAnnotation
-from claripy.ast.base import Base
-from claripy.ast.bv import BV, BVV, ESI, SI, TSI, VS
+from claripy.ast import BV, Base
 from claripy.backends.backend import Backend
 from claripy.backends.backend_vsa.balancer import Balancer
 from claripy.backends.backend_vsa.errors import ClaripyVSAError
@@ -38,7 +37,7 @@ def normalize_arg_order(f):
     @functools.wraps(f)
     def normalizer(*args):
         if len(args) != 2:
-            raise BackendError("Unsupported arguments number %d" % len(args))
+            raise BackendError(f"Unsupported arguments number {len(args)}")
 
         if not isinstance(args[0], StridedInterval | DiscreteStridedIntervalSet | ValueSet):
             if not isinstance(args[1], StridedInterval | DiscreteStridedIntervalSet | ValueSet):
@@ -127,12 +126,12 @@ class BackendVSA(Backend):
             return e
         if isinstance(e, StridedInterval):
             if e.is_top:
-                return TSI(e.bits, explicit_name=e.name)
+                return claripy.TSI(e.bits, explicit_name=e.name)
             if e.is_bottom:
-                return ESI(e.bits)
+                return claripy.ESI(e.bits)
             if e.stride in {0, 1} and e.lower_bound == e.upper_bound:
-                return BVV(e.lower_bound, e.bits)
-            return SI(
+                return claripy.BVV(e.lower_bound, e.bits)
+            return claripy.SI(
                 name=e.name,
                 bits=e.bits,
                 lower_bound=e.lower_bound,
@@ -141,10 +140,10 @@ class BackendVSA(Backend):
             )
         if isinstance(e, ValueSet):
             if len(e.regions) == 0:
-                return VS(bits=e.bits, name=e.name)
+                return claripy.VS(bits=e.bits, name=e.name)
             if len(e.regions) == 1:
                 region = next(iter(e.regions))
-                return VS(
+                return claripy.VS(
                     bits=e.bits,
                     region=region,
                     region_base_addr=e._region_base_addrs[region].eval(1)[0] if e._region_base_addrs else 0,
@@ -424,7 +423,7 @@ class BackendVSA(Backend):
 
     def union(self, ast):
         if len(ast.args) != 2:
-            raise BackendError("Incorrect number of arguments (%d) passed to BackendVSA.union()." % len(ast.args))
+            raise BackendError(f"Incorrect number of arguments ({len(ast.args)}) passed to BackendVSA.union().")
 
         converted_0 = self.convert(ast.args[0])
         converted_1 = self.convert(ast.args[1])
@@ -439,9 +438,7 @@ class BackendVSA(Backend):
 
     def intersection(self, ast):
         if len(ast.args) != 2:
-            raise BackendError(
-                "Incorrect number of arguments (%d) passed to BackendVSA.intersection()." % len(ast.args)
-            )
+            raise BackendError(f"Incorrect number of arguments ({len(ast.args)}) passed to BackendVSA.intersection().")
 
         ret = None
 
@@ -452,7 +449,7 @@ class BackendVSA(Backend):
 
     def widen(self, ast):
         if len(ast.args) != 2:
-            raise BackendError("Incorrect number of arguments (%d) passed to BackendVSA.widen()." % len(ast.args))
+            raise BackendError(f"Incorrect number of arguments ({len(ast.args)}) passed to BackendVSA.widen().")
 
         converted_0 = self.convert(ast.args[0])
         converted_1 = self.convert(ast.args[1])

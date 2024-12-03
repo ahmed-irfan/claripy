@@ -11,14 +11,13 @@ import threading
 import weakref
 from decimal import Decimal
 from functools import reduce
+from typing import TYPE_CHECKING
 
 import z3
 from cachetools import LRUCache
 
-from claripy.ast.bool import Bool, BoolV
-from claripy.ast.bv import BV, BVV
-from claripy.ast.fp import FP, FPV
-from claripy.ast.strings import StringV
+import claripy
+from claripy.ast import BV, FP, Bool
 from claripy.backends.backend import Backend
 from claripy.errors import (
     BackendError,
@@ -29,6 +28,10 @@ from claripy.errors import (
 )
 from claripy.fp import RM, FSort
 from claripy.operations import backend_fp_operations, backend_operations, backend_strings_operations, bound_ops
+
+if TYPE_CHECKING:
+    from claripy.annotation import Annotation
+
 
 log = logging.getLogger(__name__)
 
@@ -212,13 +215,10 @@ class BackendZ3(Backend):
     # "proposed annotation backend" or wherever will prevent it from being part of the object
     # identity. also whenever the VSA attributes get the fuck out of BVS as well
     @property
-    def extra_bvs_data(self):
-        try:
-            return self._tls.extra_bvs_data
-        except AttributeError:
-            # a pointer to get values out of Z3
-            self._tls.extra_bvs_data = {}
-            return self._tls.extra_bvs_data
+    def bvs_annotations(self) -> dict[bytes, tuple[Annotation, ...]]:
+        if not hasattr(self._tls, "bvs_annotations"):
+            self._tls.bvs_annotations = {}
+        return self._tls.bvs_annotations
 
     @property
     def _c_uint64_p(self):
@@ -302,7 +302,7 @@ class BackendZ3(Backend):
     @condom
     def BVS(self, ast):
         name = ast._encoded_name
-        self.extra_bvs_data[name] = (ast.args, ast.annotations)
+        self.bvs_annotations[name] = ast.annotations
         size = ast.size()
         # TODO: Here we can use low level APIs because the check performed by the high level API always results in
         #       the else branch of the check. This evidence although comes from the execution of the angr and claripy
@@ -432,7 +432,7 @@ class BackendZ3(Backend):
         z3_sort = z3.Z3_get_sort(ctx, ast)
 
         if decl_num not in z3_op_nums:
-            raise ClaripyError("unknown decl kind %d" % decl_num)
+            raise ClaripyError(f"unknown decl kind {decl_num}")
         if op_map.get(z3_op_nums[decl_num], None) is None:
             raise ClaripyError(f"unknown decl op {z3_op_nums[decl_num]}")
         op_name = op_map[z3_op_nums[decl_num]]
@@ -445,25 +445,25 @@ class BackendZ3(Backend):
         append_children = True
 
         if op_name == "True":
-            return BoolV(True)
+            return claripy.true()
         if op_name == "False":
-            return BoolV(False)
+            return claripy.false()
         if op_name.startswith("RM_"):
             return RM(op_name)
         if op_name == "INTERNAL":
-            return StringV(z3.SeqRef(ast).as_string())
+            return claripy.StringV(z3.SeqRef(ast).as_string())
         if op_name == "BitVecVal":
             bv_size = z3.Z3_get_bv_sort_size(ctx, z3_sort)
             if z3.Z3_get_numeral_uint64(ctx, ast, self._c_uint64_p):
-                return BVV(self._c_uint64_p.contents.value, bv_size)
+                return claripy.BVV(self._c_uint64_p.contents.value, bv_size)
             bv_num = int(z3.Z3_get_numeral_string(ctx, ast))
-            return BVV(bv_num, bv_size)
+            return claripy.BVV(bv_num, bv_size)
         if op_name in ("FPVal", "MinusZero", "MinusInf", "PlusZero", "PlusInf", "NaN"):
             ebits = z3.Z3_fpa_get_ebits(ctx, z3_sort)
             sbits = z3.Z3_fpa_get_sbits(ctx, z3_sort)
             sort = FSort.from_params(ebits, sbits)
             val = self._abstract_fp_val(ctx, ast, op_name)
-            return FPV(val, sort)
+            return claripy.FPV(val, sort)
 
         if op_name == "UNINTERPRETED" and num_args == 0:  # symbolic value
             symbol_name = _z3_decl_name_str(ctx, decl)
@@ -472,31 +472,18 @@ class BackendZ3(Backend):
 
             if symbol_ty == z3.Z3_BV_SORT:
                 bv_size = z3.Z3_get_bv_sort_size(ctx, z3_sort)
-                (ast_args, annots) = self.extra_bvs_data.get(symbol_name, (None, None))
-                if ast_args is None:
-                    ast_args = (symbol_str, None, None, None, False, False, None)
-
-                return BV(
-                    "BVS",
-                    ast_args,
-                    length=bv_size,
-                    variables=frozenset((symbol_str,)),
-                    symbolic=True,
-                    encoded_name=symbol_name,
-                    annotations=annots,
-                )
+                annots = self.bvs_annotations.get(symbol_name, ())
+                return claripy.BVS(symbol_str, bv_size, explicit_name=True, annotations=annots)
             if symbol_ty == z3.Z3_BOOL_SORT:
-                return Bool("BoolS", (symbol_str,), variables=frozenset((symbol_str,)), symbolic=True)
+                return claripy.BoolS(symbol_str, explicit_name=True)
             if symbol_ty == z3.Z3_FLOATING_POINT_SORT:
                 ebits = z3.Z3_fpa_get_ebits(ctx, z3_sort)
                 sbits = z3.Z3_fpa_get_sbits(ctx, z3_sort)
                 sort = FSort.from_params(ebits, sbits)
-                return FP(
-                    "FPS", (symbol_str, sort), variables=frozenset((symbol_str,)), symbolic=True, length=sort.length
-                )
+                return claripy.FPS(symbol_str, sort, explicit_name=True)
             if z3.Z3_is_string_sort(ctx, z3_sort):
                 raise BackendError("Z3 backend does not support string symbols")
-            raise BackendError("Unknown z3 term type %d...?" % symbol_ty)
+            raise BackendError(f"Unknown z3 term type {symbol_ty}...?")
 
         if op_name == "UNINTERPRETED":
             mystery_name = z3.Z3_get_symbol_string(ctx, z3.Z3_get_decl_name(ctx, decl))
@@ -564,7 +551,7 @@ class BackendZ3(Backend):
         decl_num = z3.Z3_get_decl_kind(ctx, decl)
 
         if decl_num not in z3_op_nums:
-            raise ClaripyError("unknown decl kind %d" % decl_num)
+            raise ClaripyError(f"unknown decl kind {decl_num}")
         if op_map.get(z3_op_nums[decl_num], None) is None:
             raise ClaripyError(f"unknown decl op {z3_op_nums[decl_num]}")
         op_name = op_map[z3_op_nums[decl_num]]

@@ -6,11 +6,8 @@ import numbers
 import operator
 from functools import reduce
 
-from claripy.ast import Base
-from claripy.ast.bool import Bool, BoolV
-from claripy.ast.bv import BV, BVV
-from claripy.ast.fp import FPV
-from claripy.ast.strings import StringV
+import claripy
+from claripy.ast import BV, Bool
 from claripy.backends.backend import Backend
 from claripy.backends.backend_concrete import bv, fp, strings
 from claripy.errors import BackendError, UnsatError
@@ -144,13 +141,13 @@ class BackendConcrete(Backend):
 
     def _abstract(self, e):  # pylint:disable=no-self-use
         if isinstance(e, bv.BVV):
-            return BVV(e.value, e.size())
+            return claripy.BVV(e.value, e.size())
         if isinstance(e, bool):
-            return BoolV(e)
+            return claripy.BoolV(e)
         if isinstance(e, fp.FPV):
-            return FPV(e.value, e.sort)
+            return claripy.FPV(e.value, e.sort)
         if isinstance(e, strings.StringV):
-            return StringV(e.value)
+            return claripy.StringV(e.value)
         raise BackendError(f"Couldn't abstract object of type {type(e)}")
 
     def _cardinality(self, a):  # pylint:disable=unused-argument
@@ -198,21 +195,17 @@ class BackendConcrete(Backend):
 
     # Override Backend.is_true() for a better performance
     def is_true(self, e, extra_constraints=(), solver=None, model_callback=None):
-        if e in {True, 1, 1.0}:
-            return True
-        if e in {False, 0, 0.0}:
-            return False
-        if type(e) is Base and e.op == "BoolV" and len(e.args) == 1 and e.args[0] is True:
+        if isinstance(e, numbers.Number):
+            return bool(e)
+        if e is claripy.true():
             return True
         return super().is_true(e, extra_constraints=extra_constraints, solver=solver, model_callback=model_callback)
 
     # Override Backend.is_false() for a better performance
     def is_false(self, e, extra_constraints=(), solver=None, model_callback=None):
-        if e in {False, 0, 0.0}:
-            return True
-        if e in {True, 1, 1.0}:
-            return False
-        if type(e) is Base and e.op == "BoolV" and len(e.args) == 1 and e.args[0] is False:
+        if isinstance(e, numbers.Number):
+            return not bool(e)
+        if e is claripy.false():
             return True
         return super().is_false(e, extra_constraints=extra_constraints, solver=solver, model_callback=model_callback)
 

@@ -151,7 +151,7 @@ class SolverCompositeChild(
         super().__init__(backend, **kwargs)
 
     def __repr__(self):
-        return "<SolverCompositeChild with %d variables>" % len(self.variables)
+        return f"<SolverCompositeChild with {len(self.variables)} variables>"
 
 
 class SolverComposite(
@@ -173,4 +173,4 @@ class SolverComposite(
         super().__init__(template_solver, track=track, **kwargs)
 
     def __repr__(self):
-        return "<SolverComposite %x, %d children>" % (id(self), len(self._solver_list))
+        return f"<SolverComposite {id(self):#x}, {len(self._solver_list)} children>"

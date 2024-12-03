@@ -58,7 +58,7 @@ class TestSimplify(unittest.TestCase):
 
     def test_rotate_shift_mask_simplification(self):
         a = claripy.BVS("N", 32).annotate(claripy.annotation.StridedIntervalAnnotation(1, 0x1, 0xC))
-        extend_ = claripy.BVS("extend", 32, uninitialized=True)
+        extend_ = claripy.BVS("extend", 32)
         a_ext = extend_.concat(a)
         expr = ((a_ext << 3) | (claripy.LShR(a_ext, 61))) & 0x7FFFFFFF8
         model_vsa = claripy.backends.vsa.convert(expr)
@@ -93,14 +93,14 @@ class TestSimplify(unittest.TestCase):
 
     def perf_boolean_and_simplification_0(self):
         # Create a gigantic And AST with many operands, one variable at a time
-        bool_vars = [claripy.BoolS("b%d" % i) for i in range(1500)]
+        bool_vars = [claripy.BoolS(f"b{i}") for i in range(1500)]
         v = bool_vars[0]
         for i in range(1, len(bool_vars)):
             v = claripy.And(v, bool_vars[i])
 
     def perf_boolean_and_simplification_1(self):
         # Create a gigantic And AST with many operands, many variables at a time
-        bool_vars = [claripy.BoolS("b%d" % i) for i in range(500)]
+        bool_vars = [claripy.BoolS(f"b{i}") for i in range(500)]
         v = bool_vars[0]
         for i in range(1, len(bool_vars)):
             v = claripy.And(*((*v.args, bool_vars[i] is False))) if v.op == "And" else claripy.And(v, bool_vars[i])

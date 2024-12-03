@@ -53,12 +53,11 @@ class ReprLevel(IntEnum):
 #
 
 var_counter = itertools.count()
-_unique_names = True
 
 
 def _make_name(name: str, size: int, explicit_name: bool = False, prefix: str = "") -> str:
-    if _unique_names and not explicit_name:
-        return "%s%s_%d_%d" % (prefix, name, next(var_counter), size)
+    if not explicit_name:
+        return f"{prefix}{name}_{next(var_counter)}_{size}"
     return name
 
 
@@ -117,20 +116,20 @@ class Base:
     _uninitialized: bool
 
     __slots__ = [
-        "op",
-        "args",
-        "length",
-        "variables",
-        "symbolic",
-        "annotations",
-        "depth",
-        "_hash",
-        "_uneliminatable_annotations",
-        "_relocatable_annotations",
-        "_errored",
-        "_cached_encoded_name",
-        "_uninitialized",
         "__weakref__",
+        "_cached_encoded_name",
+        "_errored",
+        "_hash",
+        "_relocatable_annotations",
+        "_uneliminatable_annotations",
+        "_uninitialized",
+        "annotations",
+        "args",
+        "depth",
+        "length",
+        "op",
+        "symbolic",
+        "variables",
     ]
 
     _hash_cache: WeakValueDictionary[int, Base] = WeakValueDictionary()
@@ -471,51 +470,12 @@ class Base:
             self._cached_encoded_name = self.args[0].encode()
         return self._cached_encoded_name
 
-    def _check_args_same(self, other_args: tuple[ArgType, ...], lenient_names=False) -> bool:
-        """
-        Check if two ASTs are the same.
-        """
-        # Several types inside of args don't support normall == comparison, so if we see those,
-        # we need compare them manually.
-        for a, b in zip(self.args, other_args, strict=True):
-            if isinstance(a, Base) and isinstance(b, Base):
-                if a._hash != b._hash:
-                    return False
-                continue
-            if isinstance(a, float) and isinstance(b, float):
-                if math.isnan(a) and math.isnan(b):
-                    continue
-                if math.isinf(a) and math.isinf(b):
-                    continue
-                if a != b:
-                    return False
-            if lenient_names and isinstance(a, str) and isinstance(b, str):
-                continue
-            if a != b:
-                return False
-
-        return True
-
-    def identical(self, other: Self, strict=False) -> bool:
+    def identical(self, other: Self) -> bool:
         """
         Check if two ASTs are identical. If `strict` is False, the comparison
         will be lenient on the names of the ASTs.
         """
-        return self._hash == other._hash or (
-            self.op == other.op
-            and self._check_args_same(other.args, lenient_names=not strict)
-            and self.annotations == other.annotations
-        )
-
-    #
-    # Collapsing and simplification
-    #
-
-    def _rename(self, new_name: str) -> Self:
-        if self.op not in {"BVS", "BoolS", "FPS"}:
-            raise ClaripyOperationError("rename is only supported on leaf nodes")
-        new_args = (new_name,) + self.args[1:]
-        return self.make_like(self.op, new_args, length=self.length, variables=frozenset((new_name,)))
+        return self.canonicalize() is other.canonicalize()
 
     #
     # Annotations
@@ -715,7 +675,7 @@ class Base:
         ]
 
         prec_diff = parent_prec - op_prec
-        inner_infix_use_par = prec_diff < 0 or prec_diff == 0 and not left
+        inner_infix_use_par = prec_diff < 0 or (prec_diff == 0 and not left)
         inner_repr = self._op_repr(op, args, inner, length, details, inner_infix_use_par)
 
         if not inner:
@@ -745,7 +705,7 @@ class Base:
                     value = format(args[0], "")
                 else:
                     value = format(args[0], "#x")
-                return value + "#%d" % length if length is not None else value
+                return f"{value}#{length}" if length is not None else value
 
         if details < ReprLevel.MID_REPR:
             if op == "If":
@@ -828,32 +788,8 @@ class Base:
         return False
 
     #
-    # Various AST modifications (replacements)
-    #
-
-    def swap_args(self, new_args: tuple[ArgType, ...], new_length: int | None = None, **kwargs) -> Self:
-        """
-        This returns the same AST, with the arguments swapped out for new_args.
-        """
-
-        if len(self.args) == len(new_args) and all(a is b for a, b in zip(self.args, new_args, strict=False)):
-            return self
-
-        length = self.length if new_length is None else new_length
-        return self.make_like(self.op, new_args, length=length, **kwargs)
-
-    #
     # Other helper functions
     #
-
-    def split(self, split_on: Iterable[str]) -> list[ArgType]:
-        """
-        Splits the AST if its operation is `split_on` (i.e., return all the arguments). Otherwise, return a list with
-        just the AST.
-        """
-        if self.op in split_on:
-            return list(self.args)
-        return [self]
 
     # we don't support iterating over Base objects
     def __iter__(self) -> NoReturn:
@@ -920,26 +856,23 @@ class Base:
         var_map = {} if var_map is None else var_map
 
         for v in self.leaf_asts():
-            if v.hash() not in var_map and v.op in {"BVS", "BoolS", "FPS"}:
-                new_name = "canonical_%d" % next(counter)
-                var_map[v.hash()] = v._rename(new_name)
+            if v.hash() not in var_map and v.is_leaf():
+                new_name = f"canonical_{next(counter)}"
+                match v.op:
+                    case "BVS":
+                        var_map[v.hash()] = claripy.BVS(new_name, v.length, explicit_name=True)
+                    case "BoolS":
+                        var_map[v.hash()] = claripy.BoolS(new_name, explicit_name=True)
+                    case "FPS":
+                        var_map[v.hash()] = claripy.FPS(new_name, v.args[1], explicit_name=True)
+                    case "StringS":
+                        var_map[v.hash()] = claripy.StringS(new_name, explicit_name=True)
 
         return var_map, counter, claripy.replace_dict(self, var_map)
 
     #
     # these are convenience operations
     #
-
-    def _first_backend(self, what):
-        for b in claripy.backends.all_backends:
-            if b in self._errored:
-                continue
-
-            try:
-                return getattr(b, what)(self)
-            except BackendError:
-                pass
-        return None
 
     @property
     def concrete_value(self):
@@ -953,15 +886,15 @@ class Base:
 
     @property
     def singlevalued(self) -> bool:
-        return self._first_backend("singlevalued")
+        return claripy.backends.any_backend.singlevalued(self)
 
     @property
     def multivalued(self) -> bool:
-        return self._first_backend("multivalued")
+        return claripy.backends.any_backend.multivalued(self)
 
     @property
     def cardinality(self) -> int:
-        return self._first_backend("cardinality")
+        return claripy.backends.any_backend.cardinality(self)
 
     @property
     def concrete(self) -> bool:

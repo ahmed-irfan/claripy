@@ -7,7 +7,7 @@ import operator
 import threading
 from contextlib import suppress
 
-from claripy.ast.base import Base
+from claripy.ast import Base
 from claripy.errors import BackendError, BackendUnsupportedError, ClaripyRecursionError
 
 log = logging.getLogger(__name__)
@@ -57,13 +57,13 @@ class Backend:
     # pylint: disable=too-many-positional-arguments
 
     __slots__ = (
-        "_op_raw",
-        "_op_expr",
         "_cache_objects",
+        "_false_cache",
+        "_op_expr",
+        "_op_raw",
         "_solver_required",
         "_tls",
         "_true_cache",
-        "_false_cache",
     )
 
     def __init__(self, solver_required=None):

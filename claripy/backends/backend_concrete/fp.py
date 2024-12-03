@@ -38,7 +38,7 @@ def normalize_types(f):
 
 class FPV(BackendObject):
     """A concrete floating point value. Used in the concrete backend for
-    calculations.  Any use outside of claripy should use `claripy.ast.fp.FPV`
+    calculations.  Any use outside of claripy should use `claripy.FPV`
     instead.
     """
 
@@ -403,11 +403,11 @@ def fpIsNaN(x):
     """
     Checks whether the argument is a floating point NaN.
     """
-    return math.isnan(x)
+    return math.isnan(x.value)
 
 
 def fpIsInf(x):
     """
     Checks whether the argument is a floating point infinity.
     """
-    return math.isinf(x)
+    return math.isinf(x.value)
