@@ -273,7 +273,6 @@ class ModelCacheMixin:
 
     def _get_batch_solutions(self, asts, n=None, extra_constraints=(), allow_unconstrained=True):
         results = set()
-
         for m in self._get_models(extra_constraints):
             try:
                 results.add(m.eval_list(asts, allow_unconstrained=allow_unconstrained))
@@ -306,8 +305,8 @@ class ModelCacheMixin:
 
     def batch_eval(self, asts, n, extra_constraints=(), exact=None):
         results = self._get_batch_solutions(asts, n=n, extra_constraints=extra_constraints)
-
-        if len(results) == n or (len(asts) == 1 and asts[0].hash() in self._eval_exhausted):
+        
+        if len(results) == n or (len(results) != 0 and len(asts) == 1 and asts[0].hash() in self._eval_exhausted):
             return results
 
         remaining = n - len(results)
