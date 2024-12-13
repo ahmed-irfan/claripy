@@ -400,12 +400,12 @@ class CompositeFrontend(ConstrainedFrontend):
         if self.satisfiable(extra_constraints=extra_constraints):
             return ()
 
-        cores = []
+        cores = set()
 
         for solver in self._solver_list:
-            cores.extend(list(solver.unsat_core(extra_constraints=extra_constraints)))
+            cores.update(list(solver.unsat_core(extra_constraints=extra_constraints)))
 
-        return cores
+        return list(cores)
 
     def simplify(self):
         if self._unsat:
