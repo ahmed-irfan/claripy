@@ -413,7 +413,8 @@ class BackendYices(Backend):
             s = self._tls.solver
             self._yices_reset_context(s)
 
-        # Configure timeouts
+        # Configure timeouts and memout
+        # TODO
         if timeout is not None:
             self.timeout = timeout
         if max_memory is not None:
