@@ -38,15 +38,6 @@ class YicesTerm(object):
     def __hash__(self):
         return self._ast
 
-    #def __eq__(self, other):
-    #    if isinstance(other, YicesTerm):
-    #        return yices.Terms.eq(self.ast, other.ast)
-    #    if isinstance(other, numbers.Number):
-    #        t = self.ast
-    #        ty = yices.Terms.type_of_term(t)
-    #        assert(yices.Types.is_bitvector(ty))
-    #    return None
-    
     @property
     def ast(self):
         return self._ast
@@ -146,10 +137,10 @@ class BackendYices(Backend):
         self.timeout = 0
         self.memlimit = 0
 
-        self.already_tracked = set()
-        self.tracked_assumptions = []
-        self.tracked_assumptions_map = {}
-        self.tracked_assumptions_size_stack = []
+        self.already_tracked = set() # boolean assumption names (as strings) 
+        self.tracked_assumptions = [] # boolean assumption variables (without YicesTerm class wrapper)
+        self.tracked_assumptions_map = {} # map from boolean assumptions to actual assertions (without YicesTerm class wrapper)
+        self.tracked_assumptions_size_stack = [] # remember size of tracked_assumptions list (per push)
 
     
     @property
@@ -280,14 +271,11 @@ class BackendYices(Backend):
             pass
 
         t = yterm.ast
-        #print("abstracting ")
-        #print(yices.Terms.to_string(t))
         if t == yices.Terms.true():
             a = BoolV(True)
         elif t == yices.Terms.false():
             a =  BoolV(False)
         elif yices.Terms.is_atomic(t):
-            #print(yices.Terms.to_string(t))
             ty = yices.Terms.type_of_term(t)
             if yices.Types.is_bitvector(ty):
                 bv_size = yices.Terms.bitsize(t)
@@ -299,7 +287,6 @@ class BackendYices(Backend):
                     a =  BVV(bv_num, bv_size)
                 if constructor == yices.Constructor.UNINTERPRETED_TERM:
                     symbol_name = yices.Terms.get_name(t)
-                    #print(symbol_name)
                     annots = self.bvs_annotations.get(symbol_name, ())
                     a =  BVS(symbol_name, bv_size, explicit_name=True, annotations=annots)
             elif yices.Types.is_bool(ty):
@@ -386,9 +373,7 @@ class BackendYices(Backend):
                 m = [self._abstract_internal(x)] * e
                 args.append(reduce(BV.__mul__, m))
             a =  reduce(BV.__mul__, args)
-            assert(False)
         else:
-            assert(False)
             raise BackendError("Yices backend does not support term %s...?" % yices.Terms.to_string(t))
             
         self._ast_cache[h] = (a, t)
@@ -443,14 +428,12 @@ class BackendYices(Backend):
                 if name not in self.already_tracked:
                     assump = yices.Terms.new_uninterpreted_term(yices.Types.bool_type(), name)
                     a = yices.Terms.implies(assump, constraint.ast)
-                    yices.Context.assert_formula(s, a)
+                    self._yices_assert_formula(s, YicesTerm(a))
                     self.already_tracked.add(name)
                     self.tracked_assumptions.append(assump)
                     self.tracked_assumptions_map[assump] = constraint
         else:
-            #for constraint in c:
-            #    print(yices.Terms.to_string(constraint))
-            yices.Context.assert_formulas(s, [a.ast for a in c])
+            self._yices_assert_formulas(s, c)
 
     def add(self, s, c, track=False):
         converted = self.convert_list(c)
@@ -462,13 +445,11 @@ class BackendYices(Backend):
 
     def _unsat_core(self, s):
         cores = yices.Context.get_unsat_core(s)
-        #print("CORES size " + str(len(cores)))
         return [self.tracked_assumptions_map[c] for c in cores]
 
     @condom
     def _primitive_from_model(self, model, expr):
         v = yices.Model.get_value_as_term(model, expr.ast)
-        #print("model val term: ", yices.Terms.to_string(v))
         return self._abstract_to_primitive(YicesTerm(v))
 
 
@@ -479,8 +460,6 @@ class BackendYices(Backend):
         model = {}
         defined_terms = yices.Model.collect_defined_terms(yices_model)
         for m in defined_terms:
-            #n = yices.Terms.get_name(m)
-            #if n is not None:
             me = yices.Model.get_value_as_term(yices_model, m)
             model[m] = self._abstract_to_primitive(YicesTerm(me))
 
@@ -495,11 +474,18 @@ class BackendYices(Backend):
         yices.Context.reset_context(solver)
 
 
+    def _yices_assert_formula(self, solver, assertion):  
+        yices.Context.assert_formula(solver, assertion.ast)
+
+
+    def _yices_assert_formulas(self, solver, assertions):
+        yices.Context.assert_formulas(solver, [a.ast for a in assertions])
+
+
     def _yices_check_context(self, solver, extra_constraints=[], occasion=""):
         log.debug("Doing a check! (%s)", occasion)
-        #print("CHECKING CONTEXT")
-        
-        assumps = self.tracked_assumptions + extra_constraints
+
+        assumps = self.tracked_assumptions + [e.ast for e in extra_constraints]
         result = yices.Context.check_context_with_assumptions(solver, None, assumps)
 
         if result == yices.Status.ERROR:
@@ -512,11 +498,10 @@ class BackendYices(Backend):
     
     def _satisfiable(self, extra_constraints=(), solver=None, model_callback=None):
         self.solve_count += 1
-        
+
         log.debug("Doing a check! (satisfiable)")
-        #print("Doing a check! (satisfiable)")
         
-        if not self._yices_check_context(solver, [a.ast for a in extra_constraints], "satisfiable"):
+        if not self._yices_check_context(solver, list(extra_constraints), "satisfiable"):
             return False
 
         if model_callback is not None:
@@ -549,7 +534,7 @@ class BackendYices(Backend):
 
         for i in range(n):
             self.solve_count += 1
-            if not self._yices_check_context(solver, [c.ast for c in extra_constraints], "batch_eval"):
+            if not self._yices_check_context(solver, list(extra_constraints), "batch_eval"):
                 break
             model = yices.Model.from_context(solver, 1)
 
@@ -560,7 +545,6 @@ class BackendYices(Backend):
                     v = YicesTerm(yices.Model.get_value_as_term(model, expr.ast))
                     r.append(v)
                 else:
-                    #print(expr)
                     r.append(expr)
 
             # Append the solution to the result list
@@ -571,13 +555,12 @@ class BackendYices(Backend):
             # Construct the extra constraint so we don't get the same result anymore
             if i + 1 != n:
                 l = [self._op_raw_eq(ex, ex_v) if not isinstance(ex, numbers.Number) else YicesTerm(yices.Terms.true()) for ex, ex_v in zip(exprs, r, strict=False)]
-                yices.Context.assert_formula(solver, self._op_raw_Not(self._op_raw_And(*l)).ast)
+                self._yices_assert_formula(solver, self._op_raw_Not(self._op_raw_And(*l)))
                 model = None
 
         if n > 1:
             self._pop(solver)
 
-        #print("batch evel result size is : " + str(len(result_values)))
         return result_values
     
     def _extrema(self, is_max: bool, expr, extra_constraints, signed, solver, model_callback):
@@ -589,7 +572,7 @@ class BackendYices(Backend):
         lo = -(2 ** (bv_size - 1)) if signed else 0
         hi = 2 ** (bv_size - 1) - 1 if signed else 2 ** bv_size - 1
 
-        constraints = extra_constraints#[self.convert(e) for e in extra_constraints]
+        constraints = extra_constraints
         comment = "max" if is_max else "min"
 
         GE = self._op_raw_SGE if signed else self._op_raw_UGE
@@ -607,7 +590,7 @@ class BackendYices(Backend):
             )
 
             self.solve_count += 1
-            sat = self._yices_check_context(solver, [c.ast for c in constraints], comment)
+            sat = self._yices_check_context(solver, constraints, comment)
             constraints.pop()
             if sat:
                 log.debug("... still sat")
@@ -622,7 +605,7 @@ class BackendYices(Backend):
 
         constraints.append(self._op_raw_eq(expr, YicesTerm(yices.Terms.bvconst_integer(bv_size, hi)) if is_max 
                                            else YicesTerm(yices.Terms.bvconst_integer(bv_size, lo))))
-        sat = self._yices_check_context(solver, [c.ast for c in constraints], comment)
+        sat = self._yices_check_context(solver, constraints, comment)
         if sat and model_callback is not None:
             model_callback(self._generic_model(yices.Model.from_context(solver, 1)))
         return hi if sat == is_max else lo
