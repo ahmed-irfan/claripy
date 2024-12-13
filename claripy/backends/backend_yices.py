@@ -31,6 +31,9 @@ try:
 except ImportError:
     _is_pypy = False
 
+"""
+Wrapper around the Yices terms, which are simply ints.
+"""
 class YicesTerm(object):
     def __init__(self, term):
         self._ast = term
