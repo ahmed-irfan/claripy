@@ -736,12 +736,12 @@ class BackendYices(Backend):
     @staticmethod
     @condom
     def _op_raw_RotateLeft(a, b):
-        return YicesTerm(yices.Terms.rotate_left(a.ast, b.ast))
+        return YicesTerm(yices.Terms.rotate_left(a.ast, b))
 
     @staticmethod
     @condom
     def _op_raw_RotateRight(a, b):
-        return YicesTerm(yices.Terms.rotate_right(a.ast, b.ast))
+        return YicesTerm(yices.Terms.rotate_right(a.ast, b))
     
     @staticmethod
     @condom
@@ -781,7 +781,7 @@ class BackendYices(Backend):
     @staticmethod
     @condom
     def _op_raw_ZeroExt(n, a):
-        return YicesTerm(yices.Terms.zero_extend(a.ast, n.ast))
+        return YicesTerm(yices.Terms.zero_extend(a.ast, n))
 
     @staticmethod
     @condom
