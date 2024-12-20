@@ -305,7 +305,7 @@ class ModelCacheMixin:
 
     def batch_eval(self, asts, n, extra_constraints=(), exact=None):
         results = self._get_batch_solutions(asts, n=n, extra_constraints=extra_constraints)
-        
+
         if len(results) == n or (len(results) != 0 and len(asts) == 1 and asts[0].hash() in self._eval_exhausted):
             return results
 
