@@ -273,6 +273,7 @@ class ModelCacheMixin:
 
     def _get_batch_solutions(self, asts, n=None, extra_constraints=(), allow_unconstrained=True):
         results = set()
+
         for m in self._get_models(extra_constraints):
             try:
                 results.add(m.eval_list(asts, allow_unconstrained=allow_unconstrained))
