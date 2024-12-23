@@ -250,7 +250,7 @@ class BackendZ3(Backend):
         self.reuse_z3_solver = reuse_z3_solver
 
         self._ast_cache_size = ast_cache_size
-        
+
         # and the operations
         all_ops = backend_fp_operations | backend_operations
         all_ops |= backend_strings_operations - {"StrIsDigit"}
@@ -262,6 +262,7 @@ class BackendZ3(Backend):
         self._op_raw["__gt__"] = self._op_raw_UGT
         self._op_raw["__le__"] = self._op_raw_ULE
         self._op_raw["__lt__"] = self._op_raw_ULT
+
         self._op_raw["Reverse"] = self._op_raw_Reverse
         self._op_raw["fpToSBV"] = self._op_raw_fpToSBV
         self._op_raw["fpToUBV"] = self._op_raw_fpToUBV
