@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from claripy import algorithm, ast, backends
+from claripy import algorithm, annotation, ast, backends
 from claripy.algorithm import burrow_ite, excavate_ite, is_false, is_true, replace, replace_dict, simplify
-from claripy.annotation import Annotation, RegionAnnotation, SimplificationAvoidanceAnnotation
+from claripy.annotation import Annotation, RegionAnnotation, SimplificationAvoidanceAnnotation, UninitializedAnnotation
 from claripy.ast.bool import (
     And,
     BoolS,
@@ -107,7 +107,7 @@ from claripy.solvers import (
     SolverVSA,
 )
 
-__version__ = "9.2.134.dev0"
+__version__ = "9.2.138.dev0"
 
 __all__ = (
     "BVS",
@@ -172,10 +172,12 @@ __all__ = (
     "StrToInt",
     "StringS",
     "StringV",
+    "UninitializedAnnotation",
     "UnsatError",
     "ValueSet",
     "ZeroExt",
     "algorithm",
+    "annotation",
     "ast",
     "backends",
     "burrow_ite",
