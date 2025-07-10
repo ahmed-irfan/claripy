@@ -167,8 +167,6 @@ expression_arithmetic_operations = {
     "__rmul__",
     "__sub__",
     "__rsub__",
-    "__pow__",
-    "__rpow__",
     "__mod__",
     "__rmod__",
     "SDiv",
@@ -194,18 +192,15 @@ expression_comparator_operations = {
     # comparisons
     "__eq__",
     "__ne__",
-    "__ge__",
-    "__le__",
-    "__gt__",
-    "__lt__",
+    "UGT",
+    "UGE",
+    "ULT",
+    "ULE",
+    "SGT",
+    "SGE",
+    "SLT",
+    "SLE",
 }
-
-# expression_comparator_operations = {
-#     'Eq',
-#     'Ne',
-#     'Ge', 'Le',
-#     'Gt', 'Lt',
-# }
 
 expression_bitwise_operations = {
     # bitwise
@@ -286,6 +281,7 @@ backend_fp_cmp_operations = {
     "fpGT",
     "fpGEQ",
     "fpEQ",
+    "fpNEQ",
 }
 
 backend_fp_operations = {
@@ -332,16 +328,10 @@ opposites = {
     "__rmul__": "__mul__",
     "__sub__": "__rsub__",
     "__rsub__": "__sub__",
-    "__pow__": "__rpow__",
-    "__rpow__": "__pow__",
     "__mod__": "__rmod__",
     "__rmod__": "__mod__",
     "__eq__": "__eq__",
     "__ne__": "__ne__",
-    "__ge__": "__le__",
-    "__le__": "__ge__",
-    "__gt__": "__lt__",
-    "__lt__": "__gt__",
     "ULT": "UGT",
     "UGT": "ULT",
     "ULE": "UGE",
@@ -373,7 +363,6 @@ reversed_ops = {
     "__rmod__": "__mod__",
     "__rmul__": "__mul__",
     "__ror__": "__or__",
-    "__rpow__": "__pow__",
     "__rrshift__": "__rshift__",
     "__rsub__": "__sub__",
     "__rtruediv__": "__truediv__",
@@ -383,10 +372,6 @@ reversed_ops = {
 inverse_operations = {
     "__eq__": "__ne__",
     "__ne__": "__eq__",
-    "__gt__": "__le__",
-    "__lt__": "__ge__",
-    "__ge__": "__lt__",
-    "__le__": "__gt__",
     "ULT": "UGE",
     "UGE": "ULT",
     "UGT": "ULE",
@@ -426,14 +411,9 @@ infix = {
     "__mul__": "*",
     "__floordiv__": "/",
     "__truediv__": "/",  # the raw / operator should use integral semantics on bitvectors
-    "__pow__": "**",
     "__mod__": "%",
     "__eq__": "==",
     "__ne__": "!=",
-    "__ge__": ">=",
-    "__le__": "<=",
-    "__gt__": ">",
-    "__lt__": "<",
     "UGE": ">=",
     "ULE": "<=",
     "UGT": ">",
@@ -462,7 +442,6 @@ prefix = {
 
 op_precedence = {  # based on https://en.cppreference.com/w/c/language/operator_precedence
     # precedence: 2
-    "__pow__": 2,
     "Not": 2,
     "__neg__": 2,
     "__invert__": 2,

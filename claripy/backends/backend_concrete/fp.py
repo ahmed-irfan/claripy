@@ -67,6 +67,8 @@ class FPV(BackendObject):
         return FPV(-self.value, self.sort)
 
     def fpSqrt(self):
+        if self.value < 0:
+            return FPV(float("nan"), self.sort)
         return FPV(math.sqrt(self.value), self.sort)
 
     @normalize_types
@@ -314,7 +316,7 @@ def fpEQ(a, b):
     return a == b
 
 
-def fpNE(a, b):
+def fpNEQ(a, b):
     """
     Checks if floating point `a` is not equal to floating point `b`.
     """

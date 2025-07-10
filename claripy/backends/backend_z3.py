@@ -11,7 +11,7 @@ import threading
 import weakref
 from decimal import Decimal
 from functools import reduce
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import z3
 from cachetools import LRUCache
@@ -30,6 +30,8 @@ from claripy.fp import RM, FSort
 from claripy.operations import backend_fp_operations, backend_operations, backend_strings_operations, bound_ops
 
 if TYPE_CHECKING:
+    from types import FrameType
+
     from claripy.annotation import Annotation
 
 
@@ -41,7 +43,7 @@ ALL_Z3_CONTEXTS = weakref.WeakSet()
 INT_STRING_CHUNK_SIZE: int | None = None  # will be updated later if we are on CPython 3.11+
 
 
-def handle_sigint(signals, frametype):
+def handle_sigint(signals: int, frametype: FrameType | None) -> Any:
     if old_handler == signal.SIG_IGN:
         return
 
@@ -49,8 +51,6 @@ def handle_sigint(signals, frametype):
     for context in contexts:
         context.interrupt()
 
-    if old_handler is signal.default_int_handler:
-        raise KeyboardInterrupt
     if callable(old_handler):
         old_handler(signals, frametype)
     else:
@@ -258,10 +258,10 @@ class BackendZ3(Backend):
             self._op_raw[o] = getattr(self, "_op_raw_" + o)
         self._op_raw["Xor"] = self._op_raw_Xor
 
-        self._op_raw["__ge__"] = self._op_raw_UGE
-        self._op_raw["__gt__"] = self._op_raw_UGT
-        self._op_raw["__le__"] = self._op_raw_ULE
-        self._op_raw["__lt__"] = self._op_raw_ULT
+        self._op_raw["UGE"] = self._op_raw_UGE
+        self._op_raw["UGT"] = self._op_raw_UGT
+        self._op_raw["ULE"] = self._op_raw_ULE
+        self._op_raw["ULT"] = self._op_raw_ULT
 
         self._op_raw["Reverse"] = self._op_raw_Reverse
         self._op_raw["fpToSBV"] = self._op_raw_fpToSBV
@@ -540,6 +540,18 @@ class BackendZ3(Backend):
             sort = FSort.from_params(ebits, sbits)
             val = self._abstract_fp_val(ctx, ast, op_name)
             return claripy.FPV(val, sort)
+        if op_name == "fpToUBV":
+            bv_size = z3.Z3_get_bv_sort_size(ctx, z3_sort)
+            return claripy.fpToUBV(*children, bv_size)
+        if op_name == "fpToSBV":
+            bv_size = z3.Z3_get_bv_sort_size(ctx, z3_sort)
+            return claripy.fpToSBV(*children, bv_size)
+        if op_name == "SignExt":
+            bv_size = z3.Z3_get_decl_int_parameter(ctx, decl, 0)
+            return claripy.SignExt(bv_size, children[0])
+        if op_name == "ZeroExt":
+            bv_size = z3.Z3_get_decl_int_parameter(ctx, decl, 0)
+            return claripy.ZeroExt(bv_size, children[0])
 
         if op_name == "UNINTERPRETED" and num_args == 0:  # symbolic value
             symbol_name = _z3_decl_name_str(ctx, decl)
@@ -576,11 +588,6 @@ class BackendZ3(Backend):
             mantissa = z3.Z3_fpa_get_sbits(ctx, z3_sort)
             sort = FSort.from_params(exp, mantissa)
             args = [*children, sort]
-            append_children = False
-        elif op_name in ("fpToSBV", "fpToUBV"):
-            # uuuuuugggggghhhhhh
-            bv_size = z3.Z3_get_bv_sort_size(ctx, z3_sort)
-            args = [*children, bv_size]
             append_children = False
         else:
             args = []
@@ -1088,6 +1095,10 @@ class BackendZ3(Backend):
         return z3.BoolRef(z3.Z3_mk_fpa_eq(self._context.ref(), a.as_ast(), b.as_ast()), self._context)
 
     @condom
+    def _op_raw_fpNEQ(self, a, b):
+        return z3.Not(z3.BoolRef(z3.Z3_mk_fpa_eq(self._context.ref(), a.as_ast(), b.as_ast()), self._context))
+
+    @condom
     def _op_raw_fpIsNaN(self, a):
         return z3.BoolRef(z3.Z3_mk_fpa_is_nan(self._context.ref(), a.as_ast()), self._context)
 
@@ -1445,7 +1456,7 @@ op_map = {
     "Z3_OP_PB_EQ": None,
     "Z3_OP_PB_GE": None,
     "Z3_OP_PB_LE": None,
-    "Z3_OP_POWER": "__pow__",
+    "Z3_OP_POWER": None,
     "Z3_OP_PR_AND_ELIM": None,
     "Z3_OP_PR_APPLY_DEF": None,
     "Z3_OP_PR_ASSERTED": None,

@@ -50,6 +50,7 @@ from claripy.ast.bv import (
 from claripy.ast.fp import (
     FPS,
     FPV,
+    RM,
     fpAbs,
     fpAdd,
     fpDiv,
@@ -63,6 +64,7 @@ from claripy.ast.fp import (
     fpLT,
     fpMul,
     fpNeg,
+    fpNEQ,
     fpSqrt,
     fpSub,
     fpToFP,
@@ -107,7 +109,7 @@ from claripy.solvers import (
     SolverVSA,
 )
 
-__version__ = "9.2.138.dev0"
+__version__ = "9.2.166.dev0"
 
 __all__ = (
     "BVS",
@@ -117,6 +119,7 @@ __all__ = (
     "FPV",
     "FSORT_DOUBLE",
     "FSORT_FLOAT",
+    "RM",
     "SGE",
     "SGT",
     "SI",
@@ -196,6 +199,7 @@ __all__ = (
     "fpLEQ",
     "fpLT",
     "fpMul",
+    "fpNEQ",
     "fpNeg",
     "fpSqrt",
     "fpSub",

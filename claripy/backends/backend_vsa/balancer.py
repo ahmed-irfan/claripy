@@ -81,7 +81,7 @@ class Balancer:
         si = claripy.backends.vsa.convert(a)
         mx = Balancer._max(a)
         mn = Balancer._min(a)
-        return claripy.BVS("bounds", len(a), min=mn, max=mx, stride=si._stride)
+        return claripy.BVS("bounds", len(a)).annotate(claripy.annotation.StridedIntervalAnnotation(si._stride, mn, mx))
 
     @staticmethod
     def _cardinality(a):
@@ -129,7 +129,7 @@ class Balancer:
     def _align_truism(truism):
         outer_aligned = Balancer._align_ast(truism)
         inner_aligned = outer_aligned.make_like(
-            outer_aligned.op, (Balancer._align_ast(outer_aligned.args[0]),) + outer_aligned.args[1:]
+            outer_aligned.op, (Balancer._align_ast(outer_aligned.args[0]), *outer_aligned.args[1:])
         )
 
         if not claripy.backends.vsa.identical(inner_aligned, truism):
@@ -168,7 +168,7 @@ class Balancer:
             raise ClaripyBalancerError(f"unable to reverse comparison {a.op} (missing from 'opposites')")
 
         try:
-            op = getattr(operator, new_op)
+            op = getattr(BV, new_op)
         except AttributeError as err:
             raise ClaripyBalancerError(f"unable to reverse comparison {a.op} (AttributeError)") from err
 
@@ -278,9 +278,9 @@ class Balancer:
         assumed to be true. For example, `x <= 10` would return `x >= 0`.
         """
 
-        if t.op in ("__le__", "__lt__", "ULE", "ULT"):
+        if t.op in ("ULE", "ULT"):
             return [t.args[0] >= 0]
-        if t.op in ("__ge__", "__gt__", "UGE", "UGT"):
+        if t.op in ("UGE", "UGT"):
             return [t.args[0] <= 2 ** len(t.args[0]) - 1]
         if t.op in ("SLE", "SLT"):
             return [claripy.SGE(t.args[0], -(1 << (len(t.args[0]) - 1)))]
@@ -334,52 +334,54 @@ class Balancer:
     #
 
     def _balance(self, truism):
-        log.debug("Balancing %s", truism)
+        while True:
+            log.debug("Balancing %s", truism)
 
-        # can't balance single-arg bools (Not) for now
-        if len(truism.args) == 1:
-            return truism
-
-        if not isinstance(truism.args[0], Base):
-            return truism
-
-        try:
-            inner_aligned = Balancer._align_truism(truism)
-            if inner_aligned.args[1].cardinality > 1:
-                log.debug("can't do anything because we have multiple multivalued guys")
+            # can't balance single-arg bools (Not) for now
+            if len(truism.args) == 1:
                 return truism
 
-            match inner_aligned.args[0].op:
-                case "Reverse":
-                    balanced = Balancer._balance_reverse(inner_aligned)
-                case "__add__":
-                    balanced = Balancer._balance_add(inner_aligned)
-                case "__sub__":
-                    balanced = Balancer._balance_sub(inner_aligned)
-                case "ZeroExt":
-                    balanced = Balancer._balance_zeroext(inner_aligned)
-                case "SignExt":
-                    balanced = Balancer._balance_signext(inner_aligned)
-                case "Extract":
-                    balanced = Balancer._balance_extract(inner_aligned)
-                case "__and__":
-                    balanced = Balancer._balance_and(inner_aligned)
-                case "Concat":
-                    balanced = Balancer._balance_concat(inner_aligned)
-                case "__lshift__":
-                    balanced = Balancer._balance_lshift(inner_aligned)
-                case "If":
-                    balanced = self._balance_if(inner_aligned)
-                case _:
-                    log.debug("Balance handler %s not implemented.", truism.args[0].op)
+            if not isinstance(truism.args[0], Base):
+                return truism
+
+            try:
+                inner_aligned = Balancer._align_truism(truism)
+                if inner_aligned.args[1].cardinality > 1:
+                    log.debug("can't do anything because we have multiple multivalued guys")
                     return truism
 
-            if balanced is inner_aligned:
-                return balanced
-            return self._balance(balanced)
-        except ClaripyBalancerError:
-            log.warning("Balance handler for operation %s raised exception.", truism.args[0].op)
-            return truism
+                match inner_aligned.args[0].op:
+                    case "Reverse":
+                        balanced = Balancer._balance_reverse(inner_aligned)
+                    case "__add__":
+                        balanced = Balancer._balance_add(inner_aligned)
+                    case "__sub__":
+                        balanced = Balancer._balance_sub(inner_aligned)
+                    case "ZeroExt":
+                        balanced = Balancer._balance_zeroext(inner_aligned)
+                    case "SignExt":
+                        balanced = Balancer._balance_signext(inner_aligned)
+                    case "Extract":
+                        balanced = Balancer._balance_extract(inner_aligned)
+                    case "__and__":
+                        balanced = Balancer._balance_and(inner_aligned)
+                    case "Concat":
+                        balanced = Balancer._balance_concat(inner_aligned)
+                    case "__lshift__":
+                        balanced = Balancer._balance_lshift(inner_aligned)
+                    case "If":
+                        balanced = self._balance_if(inner_aligned)
+                    case _:
+                        log.debug("Balance handler %s not implemented.", truism.args[0].op)
+                        return truism
+
+                if balanced is inner_aligned:
+                    return balanced
+                truism = balanced
+                continue
+            except ClaripyBalancerError:
+                log.warning("Balance handler for operation %s raised exception.", truism.args[0].op)
+                return truism
 
     @staticmethod
     def _balance_reverse(truism):
@@ -391,9 +393,20 @@ class Balancer:
     def _balance_add(truism):
         if len(truism.args) != 2:
             return truism
-        new_lhs = truism.args[0].args[0]
         old_rhs = truism.args[1]
-        other_adds = truism.args[0].args[1:]
+        lhs = truism.args[0]
+        if all(a.concrete for a in lhs.args):
+            # the old logic
+            new_lhs = lhs.args[0]
+            other_adds = lhs.args[1:]
+        else:
+            new_lhs = tuple(a for a in lhs.args if a.symbolic)
+            if not new_lhs:
+                return truism
+            new_lhs = new_lhs[0] if len(new_lhs) == 1 else lhs.make_like("__add__", new_lhs)
+            other_adds = tuple(a for a in lhs.args if a.concrete)
+            if not other_adds:
+                return truism
         new_rhs = truism.args[0].make_like("__sub__", (old_rhs, *other_adds))
         return truism.make_like(truism.op, (new_lhs, new_rhs))
 
@@ -590,20 +603,7 @@ class Balancer:
                 self._handle_ne(truism)
             case "If":
                 self._handle_if(truism)
-            case (
-                "__lt__"
-                | "__le__"
-                | "__gt__"
-                | "__ge__"
-                | "ULT"
-                | "ULE"
-                | "UGT"
-                | "UGE"
-                | "SLT"
-                | "SLE"
-                | "SGT"
-                | "SGE"
-            ):
+            case "ULT" | "ULE" | "UGT" | "UGE" | "SLT" | "SLE" | "SGT" | "SGE":
                 self._handle_comparison(truism)
             case _:
                 log.debug("No handler for operation %s", truism.op)
@@ -617,10 +617,6 @@ class Balancer:
         "SLE": (True, True, False),
         "SGT": (False, False, False),
         "SGE": (False, True, False),
-        "__lt__": (True, False, False),
-        "__le__": (True, True, False),
-        "__gt__": (False, False, False),
-        "__ge__": (False, True, False),
     }
 
     def _handle_comparison(self, truism):

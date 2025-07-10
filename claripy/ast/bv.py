@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import logging
-import numbers
 import weakref
 from contextlib import suppress
 
@@ -300,44 +299,12 @@ def ESI(bits, **kwargs):
     return BVV(None, bits, **kwargs)
 
 
-def ValueSet(bits, region=None, region_base_addr=None, value=None, name=None, val=None):
-    # Backward compatibility
-    if value is None and val is not None:
-        value = val
-    if region_base_addr is None:
-        region_base_addr = 0
-
-    v = region_base_addr + value
-    if isinstance(v, claripy.ast.Base):
-        v = claripy.simplify(v)
-
-    # Backward compatibility
-    if isinstance(v, numbers.Number):
-        min_v, max_v = v, v
-        stride = 0
-    elif isinstance(v, claripy.ast.Base):
-        si_anno = v.get_annotation(claripy.annotation.StridedIntervalAnnotation)
-        if si_anno is not None:
-            min_v = si_anno.lower_bound
-            max_v = si_anno.upper_bound
-            stride = si_anno.stride
-        elif v.op == "BVV":
-            min_v = v.args[0]
-            max_v = v.args[0]
-            stride = 0
-        else:
-            raise ClaripyValueError(f"ValueSet() does not take `value` ast with op {v.op}")
-    else:
-        raise ClaripyValueError(f"ValueSet() does not take `value` of type {type(value)}")
-
-    if name is None:
-        name = "ValueSet"
-    bvs = BVS(name, bits).annotate(
-        claripy.annotation.StridedIntervalAnnotation(stride, region_base_addr + min_v, region_base_addr + max_v)
-    )
-
+def ValueSet(bits: int, region: str, region_base_addr: int, value: BV | int):
+    if isinstance(value, int):
+        value = BVV(value, bits)
+    value = value + region_base_addr
     # Annotate the bvs and return the new AST
-    return bvs.annotate(claripy.annotation.RegionAnnotation(region, region_base_addr, value))
+    return value.annotate(claripy.annotation.RegionAnnotation(region, region_base_addr))
 
 
 VS = ValueSet
@@ -349,10 +316,10 @@ VS = ValueSet
 
 
 # comparisons
-ULT = operations.op("__lt__", (BV, BV), Bool, extra_check=operations.length_same_check)
-ULE = operations.op("__le__", (BV, BV), Bool, extra_check=operations.length_same_check)
-UGT = operations.op("__gt__", (BV, BV), Bool, extra_check=operations.length_same_check)
-UGE = operations.op("__ge__", (BV, BV), Bool, extra_check=operations.length_same_check)
+ULT = operations.op("ULT", (BV, BV), Bool, extra_check=operations.length_same_check)
+ULE = operations.op("ULE", (BV, BV), Bool, extra_check=operations.length_same_check)
+UGT = operations.op("UGT", (BV, BV), Bool, extra_check=operations.length_same_check)
+UGE = operations.op("UGE", (BV, BV), Bool, extra_check=operations.length_same_check)
 SLT = operations.op("SLT", (BV, BV), Bool, extra_check=operations.length_same_check)
 SLE = operations.op("SLE", (BV, BV), Bool, extra_check=operations.length_same_check)
 SGT = operations.op("SGT", (BV, BV), Bool, extra_check=operations.length_same_check)
@@ -458,10 +425,6 @@ BV.__sub__ = operations.op(
     "__sub__", (BV, BV), BV, extra_check=operations.length_same_check, calc_length=operations.basic_length_calc
 )
 BV.__rsub__ = operations.reversed_op(BV.__sub__)
-BV.__pow__ = operations.op(
-    "__pow__", (BV, BV), BV, extra_check=operations.length_same_check, calc_length=operations.basic_length_calc
-)
-BV.__rpow__ = operations.reversed_op(BV.__pow__)
 BV.__mod__ = operations.op(
     "__mod__", (BV, BV), BV, extra_check=operations.length_same_check, calc_length=operations.basic_length_calc
 )
@@ -483,22 +446,21 @@ BV.SMod = operations.op(
 
 BV.__neg__ = operations.op("__neg__", (BV,), BV, calc_length=operations.basic_length_calc)
 BV.__pos__ = lambda x: x
-BV.__abs__ = operations.op("__abs__", (BV,), BV, calc_length=operations.basic_length_calc)
 
-BV.__eq__ = operations.op("__eq__", (BV, BV), Bool, extra_check=operations.length_same_check)
-BV.__ne__ = operations.op("__ne__", (BV, BV), Bool, extra_check=operations.length_same_check)
-BV.__ge__ = operations.op("__ge__", (BV, BV), Bool, extra_check=operations.length_same_check)
-BV.__le__ = operations.op("__le__", (BV, BV), Bool, extra_check=operations.length_same_check)
-BV.__gt__ = operations.op("__gt__", (BV, BV), Bool, extra_check=operations.length_same_check)
-BV.__lt__ = operations.op("__lt__", (BV, BV), Bool, extra_check=operations.length_same_check)
 BV.SLT = operations.op("SLT", (BV, BV), Bool, extra_check=operations.length_same_check)
 BV.SGT = operations.op("SGT", (BV, BV), Bool, extra_check=operations.length_same_check)
 BV.SLE = operations.op("SLE", (BV, BV), Bool, extra_check=operations.length_same_check)
 BV.SGE = operations.op("SGE", (BV, BV), Bool, extra_check=operations.length_same_check)
-BV.ULT = operations.op("__lt__", (BV, BV), Bool, extra_check=operations.length_same_check)
-BV.UGT = operations.op("__gt__", (BV, BV), Bool, extra_check=operations.length_same_check)
-BV.ULE = operations.op("__le__", (BV, BV), Bool, extra_check=operations.length_same_check)
-BV.UGE = operations.op("__ge__", (BV, BV), Bool, extra_check=operations.length_same_check)
+BV.ULT = operations.op("ULT", (BV, BV), Bool, extra_check=operations.length_same_check)
+BV.UGT = operations.op("UGT", (BV, BV), Bool, extra_check=operations.length_same_check)
+BV.ULE = operations.op("ULE", (BV, BV), Bool, extra_check=operations.length_same_check)
+BV.UGE = operations.op("UGE", (BV, BV), Bool, extra_check=operations.length_same_check)
+BV.__eq__ = operations.op("__eq__", (BV, BV), Bool, extra_check=operations.length_same_check)
+BV.__ne__ = operations.op("__ne__", (BV, BV), Bool, extra_check=operations.length_same_check)
+BV.__ge__ = BV.UGE
+BV.__le__ = BV.ULE
+BV.__gt__ = BV.UGT
+BV.__lt__ = BV.ULT
 
 BV.__invert__ = operations.op("__invert__", (BV,), BV, calc_length=operations.basic_length_calc)
 BV.__or__ = operations.op(
