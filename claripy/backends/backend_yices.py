@@ -394,7 +394,7 @@ class BackendYices(Backend):
                 bv_size = yices.Terms.bitsize(t)
                 assert(bv_size > 0)
                 constructor = yices.Terms.constructor(t)
-                if constructor == yices.Constructor.BV_CONSTANT:
+                if (constructor == yices.Constructor.BV_CONSTANT) or (constructor == yices.Constructor.SCALAR_CONSTANT):
                     bv_num = int("".join(str(i) for i in yices.Terms.bv_const_value(t))[::-1],2)
                     return bv_num
         raise BackendError("Unable to abstract Yices object to Primitive")
