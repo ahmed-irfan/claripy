@@ -135,6 +135,8 @@ class BackendYices(Backend):
         self._op_raw["__sub__"] = self._op_sub
         self._op_raw["__mul__"] = self._op_mul
         self._op_raw["__xor__"] = self._op_xor
+
+        self._op_raw["__invert__"] = self._op_raw_invert
         
         self.solve_count = 0
         self.timeout = 0
@@ -822,6 +824,11 @@ class BackendYices(Backend):
     @condom
     def _op_raw_SDiv(a, b):
         return YicesTerm(yices.Terms.bvsdiv(a.ast, b.ast))
+
+    @staticmethod
+    @condom
+    def _op_raw_invert(a):
+        return YicesTerm(yices.Terms.bvnot(a.ast))
 
     @staticmethod
     def _identical(a, b):
