@@ -686,7 +686,7 @@ class BackendYices(Backend):
 
     @staticmethod
     def _op_xor(*args):
-        return YicesTerm(reduce(yices.Terms.bvxor, [a.ast for a in args]))
+        return YicesTerm(yices.Terms.bvxor([a.ast for a in args]))
 
     @staticmethod
     @condom
@@ -791,11 +791,12 @@ class BackendYices(Backend):
     @staticmethod
     @condom
     def _op_raw_Reverse(a):
-        if a.size() == 8:
+        size = yices.Terms.bitsize(a.ast)
+        if size == 8:
             return a
-        if a.size() % 8 != 0:
+        if size % 8 != 0:
             raise ClaripyOperationError("can't reverse non-byte sized bitvectors")
-        return BackendYices._op_raw_Concat(*[BackendYices._op_raw_Extract(i + 7, i, a) for i in range(0, a.size(), 8)])
+        return BackendYices._op_raw_Concat(*[BackendYices._op_raw_Extract(i + 7, i, a) for i in range(0, size, 8)])
 
     @staticmethod
     @condom
